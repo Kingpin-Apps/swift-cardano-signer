@@ -199,7 +199,12 @@ extension Signer.Keygen {
         masterKey: Data,
         kind: ShelleyKeyKind
     ) throws -> KeyPairBundle {
-        let root = try HDWallet.fromSeed(seed: masterKey.hexEncodedString())
+        // Use the `Data`-accepting overload added in swift-cardano-core
+        // 0.4.6+. The older `seed: String` form hex-encoded the master
+        // key into a Swift `String`, leaving the private scalar on the
+        // heap as a non-zeroed string for the lifetime of that string.
+        // The `seedData:` overload keeps the key as `Data` end-to-end.
+        let root = try HDWallet.fromSeed(seedData: masterKey)
         let derived: HDWallet
         do {
             derived = try root.derive(fromPath: kind.path)
@@ -233,7 +238,10 @@ extension Signer.Keygen {
         masterKey: Data,
         path: ByronPath
     ) throws -> KeyPairBundle {
-        var wallet = try HDWallet.fromSeed(seed: masterKey.hexEncodedString())
+        // Same `Data` overload — see the `deriveBundle(masterKey:kind:)`
+        // helper above for the rationale (avoids hex-encoding the
+        // master key into a heap-allocated `String`).
+        var wallet = try HDWallet.fromSeed(seedData: masterKey)
         for (index, isHardened) in zip(path.indices, path.hardened) {
             wallet = try wallet.derive(
                 index: index,

@@ -22,8 +22,7 @@ Cardano. Library-only; no CLI.
   `blake2b-256(hex-lowercase(CBOR(payload)))` signing payload is
   byte-equivalent to cardano-signer.js's output. CIP-100's signing
   payload is built on top of W3C RDFC-1.0 / URDNA2015 via
-  [swift-jsonld](https://github.com/Kingpin-Apps/swift-jsonld) — the
-  same canonicalisation `digitalbazaar/jsonld.js` uses.
+  [swift-jsonld](https://github.com/Kingpin-Apps/swift-jsonld).
 - **Pure Swift.** [swift-cardano-core](https://github.com/Kingpin-Apps/swift-cardano-core),
   [swift-cardano-cips](https://github.com/Kingpin-Apps/swift-cardano-cips),
   [swift-mnemonic](https://github.com/Kingpin-Apps/swift-mnemonic),
