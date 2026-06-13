@@ -1,5 +1,5 @@
 {
-  "originHash" : "d43a546baa1ac9c21d01b0a036691b15139716d94a1d1dc55346e87d91821c9d",
+  "originHash" : "a73873cf032c2e1887637cc6089cdc6f978322c51d1f5a9e175c308a795c0320",
   "pins" : [
     {
       "identity" : "base32",
@@ -60,8 +60,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/Kingpin-Apps/swift-cardano-cips.git",
       "state" : {
-        "revision" : "92f6b6ae653bd954aceaafb55012571dbecdd770",
-        "version" : "0.3.7"
+        "revision" : "ec09cd3a379871415438306959b7f0fb9fbef4b8",
+        "version" : "0.3.8"
       }
     },
     {
