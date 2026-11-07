@@ -213,7 +213,7 @@ extension Signer.Keygen {
                 "Failed to derive \(kind.path): \(error)"
             )
         }
-        let signingKey = ExtendedSigningKey(
+        let signingKey = try ExtendedSigningKey(
             payload: derived.xPrivateKey + derived.publicKey + derived.chainCode,
             type: kind.envelopeTypeSigning,
             description: kind.envelopeDescriptionSigning
@@ -249,7 +249,7 @@ extension Signer.Keygen {
                 hardened: isHardened
             )
         }
-        let signingKey = ExtendedSigningKey(
+        let signingKey = try ExtendedSigningKey(
             payload: wallet.xPrivateKey + wallet.publicKey + wallet.chainCode,
             type: "ByronExtendedSigningKey_ed25519_bip32",
             description: "Byron Signing Key"

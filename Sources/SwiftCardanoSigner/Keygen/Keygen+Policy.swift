@@ -61,7 +61,7 @@ public extension Signer.Keygen {
         }
         
         let signingPayload = derived.xPrivateKey + derived.publicKey + derived.chainCode
-        let signingKey = ExtendedSigningKey(
+        let signingKey = try ExtendedSigningKey(
             payload: signingPayload,
             type: PaymentExtendedSigningKey.TYPE,
             description: PaymentExtendedSigningKey.DESCRIPTION
