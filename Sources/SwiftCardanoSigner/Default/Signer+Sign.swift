@@ -53,6 +53,19 @@ public extension Signer {
             publicKey = key.payload.prefix(32)
         }
 
+        // An extended key stores its public key next to the private
+        // scalar, and signing uses the scalar. Refuse a key whose stored
+        // half does not match, so the advertised key always verifies.
+        guard (try? Signer.verify(
+            payload: payload,
+            signature: signature,
+            verificationKey: .verificationKey(VerificationKey(payload: publicKey, type: nil, description: nil))
+        )) == true else {
+            throw SignerError.invalidSigningKey(
+                "The signing key's stored public key does not match its private key"
+            )
+        }
+
         return SignatureResult(signature: signature, publicKey: publicKey)
     }
 }

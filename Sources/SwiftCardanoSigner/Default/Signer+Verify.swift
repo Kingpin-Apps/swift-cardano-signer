@@ -38,6 +38,11 @@ public extension Signer {
         case .verificationKey(let key):
             publicKey = key.payload
         case .extendedVerificationKey(let key):
+            guard key.payload.count == 64 else {
+                throw SignerError.invalidVerificationKey(
+                    "Extended verification key must be 64 bytes, got \(key.payload.count)"
+                )
+            }
             publicKey = key.payload.prefix(32)
         }
 

@@ -30,10 +30,11 @@ public enum SlotNonce {
     /// - Returns: The mainnet slot number at that timestamp. The result
     ///   is clamped to zero for timestamps before Shelley genesis.
     public static func mainnetSlot(at unixTime: Int64) -> UInt64 {
-        let deltaSeconds = unixTime - mainnetShelleyGenesisUnix
-        guard deltaSeconds >= 0 else { return 0 }
+        let (deltaSeconds, underflow) = unixTime.subtractingReportingOverflow(mainnetShelleyGenesisUnix)
+        guard !underflow, deltaSeconds >= 0 else { return 0 }
         // Shelley-era slots are one second long. Add the Byron-era slot
         // offset so the result is continuous with on-chain slot numbers.
-        return UInt64(mainnetShelleyStartSlot + deltaSeconds)
+        // Both terms are non-negative, so the sum fits in UInt64.
+        return UInt64(mainnetShelleyStartSlot) + UInt64(deltaSeconds)
     }
 }
