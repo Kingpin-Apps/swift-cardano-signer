@@ -123,4 +123,41 @@ struct SecurityRegressionTests {
         await #expect(throws: (any Error).self) { _ = try await Signer.CIP100.canonicalBodyHash(of: doc) }
         _ = try await Signer.CIP100.canonicalBodyHash(of: doc, strict: false)
     }
+
+    // MARK: CIP-100 counterparty documents that were Apple-only crash leads
+
+    /// Builds bytes with an NFC "é" (C3 A9) and an NFD "é" (65 CC 81) key,
+    /// written as raw UTF-8 rather than JSON escapes.
+    private static func equivalentKeys(_ template: String) -> Data {
+        Data(template.replacingOccurrences(of: "NFC", with: "\u{00E9}")
+            .replacingOccurrences(of: "NFD", with: "e\u{0301}").utf8)
+    }
+
+    @Test("Canonically equivalent keys throw or hash, never trap", arguments: [
+        #"{"@context":{"@vocab":"https://example.com/cip-100#"},"body":{"NFC":"a","NFD":"b"}}"#,
+        #"{"@context":{"@vocab":"https://example.com/cip-100#"},"body":{"x":"a"},"NFC":1,"NFD":2}"#,
+    ])
+    func equivalentKeysDoNotTrap(_ template: String) async {
+        let doc = Self.equivalentKeys(template)
+        _ = try? await Signer.CIP100.canonicalBodyHash(of: doc)
+        _ = try? await Signer.CIP100.canonicalBodyHash(of: doc, strict: false)
+    }
+
+    @Test("Canonically equivalent keys inside an author entry never trap")
+    func equivalentAuthorKeysDoNotTrap() async {
+        let doc = Self.equivalentKeys(#"{"@context":{"@vocab":"https://example.com/cip-100#"},"body":{"x":"a"},"authors":[{"NFC":"a","NFD":"b","witness":{}}]}"#)
+        _ = try? await Signer.CIP100.verifyMetadata(doc)
+    }
+
+    @Test("Deeply nested bodies throw instead of overflowing a cooperative-thread stack",
+          arguments: [60, 100, 200, 300, 510])
+    func deepNestingDoesNotCrash(_ depth: Int) async {
+        let objects = String(repeating: #"{"a":"#, count: depth) + #""x""# + String(repeating: "}", count: depth)
+        let arrays = String(repeating: "[", count: depth) + #""x""# + String(repeating: "]", count: depth)
+        for body in [objects, arrays] {
+            let doc = Data(#"{"@context":{"@vocab":"https://example.org/"},"body":\#(body)}"#.utf8)
+            _ = try? await Signer.CIP100.verifyMetadata(doc)
+            _ = try? await Signer.CIP100.canonicalBodyHash(of: doc, strict: false)
+        }
+    }
 }
