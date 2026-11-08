@@ -8,27 +8,22 @@ public extension Signer.Keygen {
     /// mnemonic, then derive along the requested role's CIP-1852 /
     /// CIP-1853 / CIP-1854 path.
     ///
-    /// Equivalent to cardano-signer's `keygen --trezor`.
+    /// Equivalent to cardano-signer's `keygen --trezor`, and to the
+    /// Trezor firmware's default `ICARUS_TREZOR` derivation type.
     ///
-    /// Trezor's Cardano implementation uses the **same** master-key
-    /// derivation as ICARUS (PBKDF2-HMAC-SHA512 with the passphrase as
-    /// password and the BIP-39 entropy as salt, 4096 rounds, 96-byte
-    /// output, then standard Ed25519 scalar clamping). The Trezor /
-    /// Yoroi differentiation lives upstream in the **mnemonic →
-    /// entropy** step (Trezor's firmware historically padded short
-    /// mnemonics differently); BIP-39's canonical normalisation makes
-    /// this transparent here.
+    /// The master key is the Icarus one — PBKDF2-HMAC-SHA512 with the
+    /// passphrase as password, 4096 rounds, 96 bytes, then the Ed25519
+    /// clamp — with one Trezor quirk: for a 24-word phrase the salt is
+    /// the entropy **with its checksum byte appended** (33 bytes), where
+    /// Icarus uses the 32-byte entropy alone. For 12, 15, 18 and 21
+    /// words the two derivations agree.
     ///
-    /// In practice this means `trezor(...)` and the ICARUS path inside
-    /// ``Signer/Keygen/shelley(mnemonic:passphrase:kind:)`` produce
-    /// identical keys for the same mnemonic. The separate entry point
-    /// exists so cardano-signer.js–compatible callers can pass through
-    /// the `--trezor` flag without code branching, and so a future
-    /// Trezor-specific tweak (firmware quirk, BIP-39 padding rule)
-    /// can land here without breaking the Shelley path.
+    /// Checked against the Trezor firmware emulator: for the 24-word
+    /// `abandon … art` phrase the account key `m/1852'/1815'/0'` matches
+    /// the device's `ICARUS_TREZOR` result, which differs from `ICARUS`.
     ///
     /// - Parameters:
-    ///   - mnemonic: BIP-39 mnemonic words.
+    ///   - mnemonic: BIP-39 mnemonic words; the checksum is validated.
     ///   - passphrase: Optional BIP-39 passphrase.
     ///   - kind: Which role's path to derive.
     /// - Returns: The derived ``KeyPairBundle``.
@@ -37,20 +32,46 @@ public extension Signer.Keygen {
         passphrase: String = "",
         kind: ShelleyKeyKind
     ) throws -> KeyPairBundle {
-        // Trezor master key derivation = ICARUS:
-        //   PBKDF2-HMAC-SHA512(password = passphrase,
-        //                      salt     = BIP-39 entropy bytes,
-        //                      rounds   = 4096,
-        //                      length   = 96)
-        // followed by the standard Ed25519 scalar clamp on bytes 0 / 31.
-        //
-        // We can reach this exact pipeline through `HDWallet.fromMnemonic`,
-        // which is the ICARUS implementation used by
-        // ``Signer/Keygen/shelley(mnemonic:passphrase:kind:)``.
-        return try Signer.Keygen.shelley(
-            mnemonic: mnemonic,
-            passphrase: passphrase,
-            kind: kind
+        try kind.validate()
+        let root = try trezorRoot(mnemonic: mnemonic, passphrase: passphrase)
+        let derived: HDWallet
+        do {
+            derived = try root.derive(fromPath: kind.path)
+        } catch {
+            throw SignerError.invalidDerivationPath("Failed to derive \(kind.path): \(error)")
+        }
+        let signingKey = try ExtendedSigningKey(
+            payload: derived.xPrivateKey + derived.publicKey + derived.chainCode,
+            type: kind.envelopeTypeSigning,
+            description: kind.envelopeDescriptionSigning
         )
+        let verificationKey = ExtendedVerificationKey(
+            payload: derived.publicKey + derived.chainCode,
+            type: kind.envelopeTypeSigning.replacingOccurrences(of: "Signing", with: "Verification"),
+            description: kind.envelopeDescriptionSigning.replacingOccurrences(of: "Signing", with: "Verification")
+        )
+        return KeyPairBundle(signingKey: signingKey, verificationKey: verificationKey, path: derived.path)
+    }
+
+    /// The `ICARUS_TREZOR` root wallet node for a mnemonic.
+    internal static func trezorRoot(mnemonic: [String], passphrase: String) throws -> HDWallet {
+        let words = mnemonic.joined(separator: " ")
+            .decomposedStringWithCompatibilityMapping
+            .split(whereSeparator: { $0.isWhitespace })
+            .map(String.init)
+        let parsed: Mnemonic
+        do {
+            parsed = try Mnemonic(from: words)
+        } catch {
+            throw SignerError.invalidMnemonic(String(describing: error))
+        }
+        var salt = Data(parsed.entropy)
+        if words.count == 24 {
+            // 24 words carry 256 bits of entropy and an 8-bit checksum;
+            // Trezor salts PBKDF2 with all 264 bits.
+            salt.append(Data(SHA2(variant: .sha256).calculate(for: Array(parsed.entropy)))[0])
+        }
+        let seed = HDWallet.generateSeed(passphrase: passphrase, entropy: salt)
+        return try HDWallet.fromSeed(seedData: seed)
     }
 }
