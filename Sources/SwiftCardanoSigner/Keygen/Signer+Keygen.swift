@@ -35,6 +35,24 @@ public enum ShelleyKeyKind: Sendable, Equatable {
     case pool(account: UInt32 = 0)
     case calidus(account: UInt32 = 0)
 
+    /// Throws when the account or index is 2^31 or more. Hardened path
+    /// components set the top bit themselves, so a larger value would
+    /// alias another key, and a large unhardened index would silently
+    /// become a hardened one.
+    func validate() throws {
+        let values: [(String, UInt32)]
+        switch self {
+        case let .payment(account, index), let .stake(account, index),
+             let .drep(account, index), let .ccCold(account, index), let .ccHot(account, index):
+            values = [("account", account), ("index", index)]
+        case let .pool(account), let .calidus(account):
+            values = [("account", account)]
+        }
+        for (name, value) in values where value >= 0x8000_0000 {
+            throw SignerError.invalidDerivationPath("\(name) \(value) is 2^31 or more")
+        }
+    }
+
     /// The BIP-32 derivation path for this role.
     public var path: String {
         switch self {

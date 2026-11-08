@@ -29,4 +29,8 @@ public enum SignerError: Error, Sendable, Equatable {
     /// The requested derivation path was not a valid CIP-1852 / CIP-1853 /
     /// CIP-1854 path, or the index was out of range.
     case invalidDerivationPath(String)
+
+    /// The mnemonic is not a valid BIP-39 phrase (unknown word, bad
+    /// checksum or unsupported length).
+    case invalidMnemonic(String)
 }

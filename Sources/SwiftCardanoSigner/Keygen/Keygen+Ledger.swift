@@ -58,10 +58,20 @@ public extension Signer.Keygen {
         mnemonic: String,
         passphrase: String = ""
     ) throws -> Data {
-        // 1. Standard BIP-39 64-byte seed (PBKDF2-HMAC-SHA512, 2048
-        //    rounds, "mnemonic" + passphrase salt).
+        // 1. Validate the phrase as BIP-39 (known words, valid checksum,
+        //    allowed length), as the Icarus path does, then take the
+        //    standard 64-byte seed (PBKDF2-HMAC-SHA512, 2048 rounds,
+        //    "mnemonic" + passphrase salt) of the canonical phrase.
+        let words = mnemonic.decomposedStringWithCompatibilityMapping
+            .split(whereSeparator: { $0.isWhitespace })
+            .map(String.init)
+        do {
+            _ = try Mnemonic(from: words)
+        } catch {
+            throw SignerError.invalidMnemonic(String(describing: error))
+        }
         let masterSeed = Data(try Mnemonic.toSeed(
-            mnemonic: mnemonic,
+            mnemonic: words.joined(separator: " "),
             passphrase: passphrase
         ))
 

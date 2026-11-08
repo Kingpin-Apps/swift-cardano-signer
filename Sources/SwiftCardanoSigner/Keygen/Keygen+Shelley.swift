@@ -29,6 +29,7 @@ public extension Signer.Keygen {
         passphrase: String = "",
         kind: ShelleyKeyKind
     ) throws -> KeyPairBundle {
+        try kind.validate()
         let root = try HDWallet.fromMnemonic(
             mnemonic: mnemonic.joined(separator: " "),
             passphrase: passphrase

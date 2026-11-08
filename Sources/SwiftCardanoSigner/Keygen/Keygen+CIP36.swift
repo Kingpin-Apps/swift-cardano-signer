@@ -24,6 +24,11 @@ public extension Signer.Keygen {
         account: UInt32 = 0,
         address: UInt32 = 0
     ) throws -> CIP36VoteKeyPair {
+        guard account < 0x8000_0000, address < 0x8000_0000 else {
+            throw SignerError.invalidDerivationPath(
+                "CIP-36 account \(account) and address \(address) must both be below 2^31"
+            )
+        }
         let root = try HDWallet.fromMnemonic(
             mnemonic: mnemonic.joined(separator: " "),
             passphrase: passphrase
