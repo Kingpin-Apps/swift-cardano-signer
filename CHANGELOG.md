@@ -1,3 +1,16 @@
+## 0.2.0 (2026-11-08)
+
+### Feat
+
+- **cip100**: expose strict canonicalization in the signer facade
+
+### Fix
+
+- refuse inconsistent extended keys and keep SlotNonce from trapping
+- **keygen**: validate Ledger mnemonics and reject indices of 2^31 or more
+- **keygen**: match Trezor ICARUS_TREZOR for 24-word phrases
+- **keygen**: derive Daedalus children with scheme 1 and validate ByronPath
+
 ## 0.1.5 (2026-11-07)
 
 ### Fix
