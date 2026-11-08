@@ -79,7 +79,7 @@ struct KeygenByronTests {
         let customBundle = try Signer.Keygen.byron(
             mnemonic: TestFixtures.testMnemonic,
             variant: .daedalus,
-            path: ByronPath(indices: [1, 0], hardened: [true, true])
+            path: try ByronPath(indices: [1, 0], hardened: [true, true])
         )
         #expect(defaultBundle.signingKey.payload != customBundle.signingKey.payload)
     }
@@ -94,8 +94,8 @@ struct KeygenByronTests {
     }
 
     @Test("ByronPath stores indices + hardened bits and the daedalusDefault matches m/0'/0'")
-    func byronPathStorage() {
-        let path = ByronPath(indices: [1, 2, 3], hardened: [true, false, true])
+    func byronPathStorage() throws {
+        let path = try ByronPath(indices: [1, 2, 3], hardened: [true, false, true])
         #expect(path.indices == [1, 2, 3])
         #expect(path.hardened == [true, false, true])
 

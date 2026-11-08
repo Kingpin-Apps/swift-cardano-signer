@@ -5,13 +5,13 @@ import SwiftMnemonic
 import SwiftNaCl
 
 /// The Byron-era wallet variant. Determines the master-key derivation
-/// algorithm; downstream child-key derivation uses BIP-32-Ed25519 once a
-/// master key is in hand.
+/// algorithm and the child-key derivation scheme.
 public enum ByronVariant: Sendable, Equatable {
     /// Daedalus — the original IOG wallet. Master key derivation:
     /// CBOR-wrap the BIP-39 entropy, Blake2b-256, CBOR-wrap again,
     /// then HMAC-SHA512 chain with `"Root Seed Chain N"` until the
-    /// scalar clamp lands.
+    /// scalar clamp lands. Child keys use BIP32-Ed25519 derivation
+    /// scheme 1, as Daedalus random wallets do.
     case daedalus
 
     /// Yoroi paperwallet (21-word). Master key derivation requires
@@ -40,13 +40,30 @@ public struct ByronPath: Sendable, Equatable {
     /// Convenience constant for the canonical Daedalus root path
     /// `m/0'/0'` (first account, first address).
     public static let daedalusDefault = ByronPath(
-        indices: [0, 0],
+        validIndices: [0, 0],
         hardened: [true, true]
     )
 
-    public init(indices: [UInt32], hardened: [Bool]) {
-        precondition(indices.count == hardened.count)
-        self.indices = indices
+    /// - Throws: ``SignerError/invalidDerivationPath(_:)`` when the two
+    ///   arrays differ in length, or when an index is 2^31 or more (the
+    ///   hardened bit comes from `hardened`, so a larger index would
+    ///   alias another child).
+    public init(indices: [UInt32], hardened: [Bool]) throws {
+        guard indices.count == hardened.count else {
+            throw SignerError.invalidDerivationPath(
+                "ByronPath needs one hardened flag per index: \(indices.count) indices, \(hardened.count) flags"
+            )
+        }
+        if let index = indices.first(where: { $0 >= 0x8000_0000 }) {
+            throw SignerError.invalidDerivationPath(
+                "ByronPath index \(index) is 2^31 or more; pass the index below 2^31 and set its hardened flag"
+            )
+        }
+        self.init(validIndices: indices, hardened: hardened)
+    }
+
+    private init(validIndices: [UInt32], hardened: [Bool]) {
+        self.indices = validIndices
         self.hardened = hardened
     }
 }
@@ -61,6 +78,10 @@ public extension Signer.Keygen {
         case unsupportedVariant(String)
         /// CBOR encoding of the input entropy failed.
         case encodingError(String)
+        /// A passphrase was given for a variant that does not use one.
+        /// Daedalus keys come from the mnemonic alone, so a passphrase
+        /// would not protect them.
+        case passphraseNotSupported(String)
     }
 
     /// Derive a Byron-era extended key from a BIP-39 mnemonic.
@@ -75,9 +96,10 @@ public extension Signer.Keygen {
     /// - Parameters:
     ///   - mnemonic: BIP-39 mnemonic words. For Daedalus this is the
     ///     standard 12 / 15 / 18 / 21 / 24-word phrase.
-    ///   - passphrase: Optional BIP-39 passphrase. Daedalus master-key
-    ///     derivation does not consume the passphrase (cardano-signer
-    ///     ignores `--passphrase` in `--byron --variant daedalus`).
+    ///   - passphrase: Must be empty for Daedalus, whose keys come from
+    ///     the mnemonic alone; a non-empty passphrase throws
+    ///     ``ByronError/passphraseNotSupported(_:)`` rather than being
+    ///     silently ignored.
     ///   - variant: Which Byron wallet flavor to derive for.
     ///   - path: BIP-32 path to descend after the master key is in hand.
     /// - Returns: The derived ``KeyPairBundle``.
@@ -89,10 +111,15 @@ public extension Signer.Keygen {
     ) throws -> KeyPairBundle {
         switch variant {
         case .daedalus:
+            guard passphrase.isEmpty else {
+                throw ByronError.passphraseNotSupported(
+                    "Daedalus keys are derived from the mnemonic alone; the passphrase would not change or protect them"
+                )
+            }
             let masterKey = try daedalusMasterKey(
                 mnemonic: mnemonic.joined(separator: " ")
             )
-            return try deriveBundle(masterKey: masterKey, path: path)
+            return try deriveDaedalusBundle(masterKey: masterKey, path: path)
         case .yoroi:
             throw ByronError.unsupportedVariant(
                 "Yoroi paperwallet unscrambling requires the `cardano-wallet` library's algorithm, which is not yet ported. Use a fully-restored Yoroi mnemonic via `Signer.Keygen.shelley(..., kind: .payment(...))` instead."
@@ -199,6 +226,7 @@ extension Signer.Keygen {
         masterKey: Data,
         kind: ShelleyKeyKind
     ) throws -> KeyPairBundle {
+        try kind.validate()
         // Use the `Data`-accepting overload added in swift-cardano-core
         // 0.4.6+. The older `seed: String` form hex-encoded the master
         // key into a Swift `String`, leaving the private scalar on the
@@ -232,37 +260,33 @@ extension Signer.Keygen {
         )
     }
 
-    /// Build an HDWallet from a 96-byte master key and descend along a
-    /// Byron-style path expressed as raw (index, hardened) pairs.
-    static func deriveBundle(
+    /// Descend a Daedalus master key along a Byron path with BIP32-Ed25519
+    /// derivation scheme 1, the scheme Daedalus random wallets use.
+    static func deriveDaedalusBundle(
         masterKey: Data,
         path: ByronPath
     ) throws -> KeyPairBundle {
-        // Same `Data` overload — see the `deriveBundle(masterKey:kind:)`
-        // helper above for the rationale (avoids hex-encoding the
-        // master key into a heap-allocated `String`).
-        var wallet = try HDWallet.fromSeed(seedData: masterKey)
+        var node = DaedalusDerivation.Node(key: masterKey.prefix(64), chainCode: masterKey.suffix(32))
+        var components = ["m"]
         for (index, isHardened) in zip(path.indices, path.hardened) {
-            wallet = try wallet.derive(
-                index: index,
-                isPrivate: true,
-                hardened: isHardened
-            )
+            node = try DaedalusDerivation.derive(node, index: isHardened ? index | 0x8000_0000 : index)
+            components.append(isHardened ? "\(index)'" : "\(index)")
         }
+        let publicKey = try node.publicKey
         let signingKey = try ExtendedSigningKey(
-            payload: wallet.xPrivateKey + wallet.publicKey + wallet.chainCode,
+            payload: node.key + publicKey + node.chainCode,
             type: "ByronExtendedSigningKey_ed25519_bip32",
             description: "Byron Signing Key"
         )
         let verificationKey = ExtendedVerificationKey(
-            payload: wallet.publicKey + wallet.chainCode,
+            payload: publicKey + node.chainCode,
             type: "ByronExtendedVerificationKey_ed25519_bip32",
             description: "Byron Verification Key"
         )
         return KeyPairBundle(
             signingKey: signingKey,
             verificationKey: verificationKey,
-            path: wallet.path
+            path: components.joined(separator: "/")
         )
     }
 }
