@@ -125,6 +125,16 @@ of the document with `authors` stripped (per
 sign independently; tampering with the `body` invalidates every
 witness.
 
+Sign, verify and hash are **strict by default**: a document whose
+`body` holds a key that JSON-LD expansion would drop (an unmapped term,
+or one its `@context` maps to `null`) throws, because such a key is not
+covered by any signature. Pass `strict: false` to hash the way
+cardano-signer.js does (jsonld.js `safe: false`). Every listed author
+counts toward `allValid`, so an entry without a readable witness makes
+it `false`. Documents from other parties are canonicalized with a
+bounded work factor and a nesting limit, and integers beyond Int64 are
+rejected.
+
 ### CIP-129 governance IDs
 
 ```swift
@@ -157,17 +167,23 @@ let calidus = try Signer.Keygen.shelley(mnemonic: words, kind: .calidus())
 // Catalyst voting key on the CIP-36 dedicated path:
 let vote = try Signer.Keygen.cip36(mnemonic: words)
 
-// HW-wallet variants — different master key, same downstream BIP-32-Ed25519:
+// HW-wallet variants — different master key, same downstream BIP-32-Ed25519
+// (Trezor follows the firmware's ICARUS_TREZOR type, which differs from
+// ICARUS for 24-word phrases):
 let ledger = try Signer.Keygen.ledger(mnemonic: words, kind: .payment())
 let trezor = try Signer.Keygen.trezor(mnemonic: words, kind: .payment())
 
-// Byron Daedalus — original IOG wallet derivation:
+// Byron Daedalus — original IOG wallet derivation (child keys use
+// BIP32-Ed25519 derivation scheme 1, as Daedalus random wallets do):
 let byron = try Signer.Keygen.byron(mnemonic: words, variant: .daedalus)
 ```
 
 Ledger master-key derivation replicates the Adrestia `[0x01]`
 chain-code-prefix quirk that `cardano-cli` expects for HW-wallet
-interop. Yoroi / Exodus paperwallets throw
+interop. Every keygen validates the BIP-39 checksum and rejects account
+or index values of 2^31 or more (hardening is set by the role's path).
+Daedalus keys come from the mnemonic alone, so a non-empty passphrase
+throws. Yoroi / Exodus paperwallets throw
 `Signer.Keygen.ByronError.unsupportedVariant(...)` — the unscrambling
 algorithms aren't ported yet.
 
@@ -213,9 +229,10 @@ Highlights:
 - **HW-wallet derivation invariants** — Ed25519 scalar clamp (bytes
   0 / 31 bits), Ledger recursion termination (bit 5 of byte 31 clears),
   ICARUS divergence
-- **Byron Daedalus algorithm parity** with cardano-signer.js
-  (`CBOR(BLAKE2b-256(CBOR(entropy)))` seed + `HMAC-SHA512` chain with
-  `"Root Seed Chain N"`)
+- **Byron Daedalus golden vectors** from IOHK cardano-crypto
+  (derivation scheme 1, retry-old master keys), master key and children
+- **Trezor firmware keys** captured from the trezor-user-env emulator
+  (ICARUS_TREZOR vs ICARUS, 12 and 24 words)
 
 Run the suite:
 
