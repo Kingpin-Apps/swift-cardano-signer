@@ -34,27 +34,37 @@ public extension Signer {
         public static func signMetadata(
             document: Data,
             signingKey: SigningKeyType,
-            authorName: String? = nil
+            authorName: String? = nil,
+            strict: Bool = true
         ) async throws -> Data {
             return try await SwiftCardanoCIPs.CIP100.signMetadata(
                 document: document,
                 signingKey: signingKey,
-                authorName: authorName
+                authorName: authorName,
+                strict: strict
             )
         }
 
         /// Verify every author signature in a CIP-100 governance-metadata
         /// document.
+        ///
+        /// - Parameters:
+        ///   - document: JSON-LD document bytes.
+        ///   - strict: When `true` (the default), throw if JSON-LD
+        ///     expansion would drop a body key, so every key a reader
+        ///     sees is covered by the signatures. `false` hashes like
+        ///     cardano-signer.js (jsonld.js `safe: false`).
         public static func verifyMetadata(
-            _ document: Data
+            _ document: Data,
+            strict: Bool = true
         ) async throws -> VerificationResult {
-            return try await SwiftCardanoCIPs.CIP100.verifyMetadata(document)
+            return try await SwiftCardanoCIPs.CIP100.verifyMetadata(document, strict: strict)
         }
 
         /// Compute the canonical body hash (the Ed25519 signing payload)
         /// for a CIP-100 document, without producing a signature.
-        public static func canonicalBodyHash(of document: Data) async throws -> Data {
-            return try await SwiftCardanoCIPs.CIP100.canonicalBodyHash(of: document)
+        public static func canonicalBodyHash(of document: Data, strict: Bool = true) async throws -> Data {
+            return try await SwiftCardanoCIPs.CIP100.canonicalBodyHash(of: document, strict: strict)
         }
     }
 }

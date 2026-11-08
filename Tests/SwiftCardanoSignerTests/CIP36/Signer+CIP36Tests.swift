@@ -67,7 +67,8 @@ struct SignerCIP36Tests {
         }
 
         let registrationHash = try SwiftNaCl.Hash().blake2b(
-            data: registration.toCBORData(),
+            // CIP-36 sign_data: CBOR of the one-entry map {61284: registration}.
+            data: Data([0xa1, 0x19, 0xef, 0x64]) + registration.toCBORData(),
             digestSize: 32,
             encoder: RawEncoder.self
         )
@@ -136,7 +137,8 @@ struct SignerCIP36Tests {
             return
         }
         let derHash = try SwiftNaCl.Hash().blake2b(
-            data: dereg61286.toCBORData(),
+            // CIP-36 sign_data: CBOR of the one-entry map {61286: deregistration}.
+            data: Data([0xa1, 0x19, 0xef, 0x66]) + dereg61286.toCBORData(),
             digestSize: 32,
             encoder: RawEncoder.self
         )
